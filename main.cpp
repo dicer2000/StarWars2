@@ -1,3 +1,12 @@
+/*********************************
+    StarWars2 - Starter Template
+    for Socket programming example
+    CSCI 333 - Computer Networking
+    Name: Brett Huffman
+    6/6/2021
+**********************************/
+// Need to define the following to work with
+// Sockets - Don't forget!
 #define _WIN32_WINNT 0x501
 
 #include <winsock2.h>
@@ -16,6 +25,7 @@
 #define DEFAULT_BUFLEN 512
 #define DEFAULT_PORT "23"
 
+// Handle CTRL-C with SIGINT Handler
 bool bShutdown = false;
 BOOL WINAPI consoleHandler(DWORD signal) {
 
@@ -27,8 +37,9 @@ BOOL WINAPI consoleHandler(DWORD signal) {
     return TRUE;
 }
 
-int __cdecl main(int argc, char **argv) 
+int main(int argc, char **argv) 
 {
+    // Variables & Structures used throughout
     WSADATA wsaData;
     SOCKET ConnectSocket = INVALID_SOCKET;
     struct addrinfo *result = NULL,
