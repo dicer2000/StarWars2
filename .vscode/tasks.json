@@ -3,13 +3,15 @@
 	"tasks": [
 		{
 			"type": "cppbuild",
-			"label": "C/C++: clang++ build active file",
-			"command": "/usr/bin/clang++",
+			"label": "C/C++: g++.exe build active file",
+			"command": "C:\\MinGW\\bin\\g++.exe",
 			"args": [
 				"-g",
 				"main.cpp",
 				"-o",
-				"${fileDirname}/app"
+				"${fileDirname}\\starwars.exe",
+				"-lwsock32",
+				"-lws2_32"
 			],
 			"options": {
 				"cwd": "${fileDirname}"
@@ -21,7 +23,7 @@
 				"kind": "build",
 				"isDefault": true
 			},
-			"detail": "compiler: /usr/bin/clang++"
+			"detail": "compiler: C:\\MinGW\\bin\\g++.exe"
 		}
 	]
 }

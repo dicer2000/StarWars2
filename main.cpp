@@ -1,86 +1,134 @@
-#include <cstring>
-#include <iostream>
-#include <string>
+#define _WIN32_WINNT 0x501
 
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
+#include <winsock2.h>
+#include <windows.h>
+#include <ws2tcpip.h>
+#include <stdlib.h>
+#include <stdio.h>
 
-// SIGINT handling
-volatile sig_atomic_t sigIntFlag = 0;
-void sigintHandler(int sig){ // can be called asynchronously
-  sigIntFlag = 1; // set flag
+
+// Need to link with Ws2_32.lib, Mswsock.lib, and Advapi32.lib
+#pragma comment (lib, "Ws2_32.lib")
+#pragma comment (lib, "Mswsock.lib")
+#pragma comment (lib, "AdvApi32.lib")
+
+
+#define DEFAULT_BUFLEN 512
+#define DEFAULT_PORT "23"
+
+bool bShutdown = false;
+BOOL WINAPI consoleHandler(DWORD signal) {
+
+    if (signal == CTRL_C_EVENT)
+    {
+        printf("\nCleaning Up\n");
+        bShutdown = TRUE;
+    }
+    return TRUE;
 }
 
-int main(int argc, char *argv[])
+int __cdecl main(int argc, char **argv) 
 {
-    // Now we're taking an ipaddress and a port number as arguments to our program
-    if (argc != 3) {
-        std::cerr << "Run program as 'program <ipaddress> <port>'\n";
-        return -1;
+    WSADATA wsaData;
+    SOCKET ConnectSocket = INVALID_SOCKET;
+    struct addrinfo *result = NULL,
+                    *ptr = NULL,
+                    hints;
+    const char *sendbuf = "\n";
+    char recvbuf[DEFAULT_BUFLEN];
+    int iResult;
+    int recvbuflen = DEFAULT_BUFLEN;
+    
+    // Validate the parameters
+    if (argc < 2) {
+        printf("usage: %s server-name\n", argv[0]);
+        return 1;
     }
 
-    // Register SIGINT handling
-    signal(SIGINT, sigintHandler);
+    // Setup to handle cntl-c
+    if (!SetConsoleCtrlHandler(consoleHandler, TRUE)) {
+        printf("\nERROR: Could not set control handler"); 
+        return 1;
+    }
 
-    auto &ipAddress = argv[1];
-    auto &portNum   = argv[2];
-    char buffer[1024] = {0};
+    // Initialize Winsock
+    iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+    if (iResult != 0) {
+        printf("WSAStartup failed with error: %d\n", iResult);
+        return 1;
+    }
 
-    addrinfo hints, *p;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family   = AF_UNSPEC;
+    ZeroMemory( &hints, sizeof(hints) );
+    hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags    = AI_PASSIVE;
+    hints.ai_protocol = IPPROTO_TCP;
 
-    int gAddRes = getaddrinfo(ipAddress, portNum, &hints, &p);
-    if (gAddRes != 0) {
-        std::cerr << gai_strerror(gAddRes) << "\n";
-        return -2;
+    // Resolve the server address and port
+    iResult = getaddrinfo(argv[1], DEFAULT_PORT, &hints, &result);
+    if ( iResult != 0 ) {
+        printf("getaddrinfo failed with error: %d\n", iResult);
+        WSACleanup();
+        return 1;
     }
 
-    if (p == NULL) {
-        std::cerr << "No addresses found\n";
-        return -3;
+    // Attempt to connect to an address until one succeeds
+    for(ptr=result; ptr != NULL ;ptr=ptr->ai_next) {
+
+        // Create a SOCKET for connecting to server
+        ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype, 
+            ptr->ai_protocol);
+        if (ConnectSocket == INVALID_SOCKET) {
+            printf("socket failed with error: %ld\n", WSAGetLastError());
+            WSACleanup();
+            return 1;
+        }
+
+        // Connect to server.
+        iResult = connect( ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
+        if (iResult == SOCKET_ERROR) {
+            closesocket(ConnectSocket);
+            ConnectSocket = INVALID_SOCKET;
+            continue;
+        }
+        break;
     }
 
-    // socket() call creates a new socket and returns it's descriptor
-    int sockFD = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-    if (sockFD == -1) {
-        std::cerr << "Error while creating socket\n";
-        return -4;
+    freeaddrinfo(result);
+
+    if (ConnectSocket == INVALID_SOCKET) {
+        printf("Unable to connect to server!\n");
+        WSACleanup();
+        return 1;
     }
 
-    // Note: there is no bind() call as there was in Hello TCP Server
-    // why? well you could call it though it's not necessary
-    // because client doesn't necessarily has to have a fixed port number
-    // so next call will bind it to a random available port number
-
-    // connect() call tries to establish a TCP connection to the specified server
-    int connectR = connect(sockFD, p->ai_addr, p->ai_addrlen);
-    if (connectR == -1) {
-        close(sockFD);
-        std::cerr << "Error while connecting socket\n";
-        return -5;
+    // Send an initial buffer
+    iResult = send( ConnectSocket, sendbuf, (int)strlen(sendbuf), 0 );
+    if (iResult == SOCKET_ERROR) {
+        printf("send failed with error: %d\n", WSAGetLastError());
+        closesocket(ConnectSocket);
+        WSACleanup();
+        return 1;
     }
 
-    char *hello = "\n";
-    send(sockFD, hello, strlen(hello), 0);
+    printf("Bytes Sent: %ld\n", iResult);
 
-    // recv() call tries to get the response from server
-    // BUT there's a catch here, the response might take multiple calls
-    // to recv() before it is completely received
-    // will be demonstrated in another example to keep this minimal
-    while(read(sockFD, buffer, 1024) > 0 && !sigIntFlag)
+    // shutdown the connection since no more data will be sent
+    iResult = shutdown(ConnectSocket, SD_SEND);
+    if (iResult == SOCKET_ERROR) {
+        printf("shutdown failed with error: %d\n", WSAGetLastError());
+        closesocket(ConnectSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    // Receive until the peer closes the connection
+    while(recv(ConnectSocket, recvbuf, DEFAULT_BUFLEN, 0) > 0 && !bShutdown)
     {
-        std::cout << buffer;
+        printf("%s", recvbuf);
     }
-
-    std::cout << std::endl << "Shutting down" << std::endl;
-    close(sockFD);
-    freeaddrinfo(p);
-
+    // cleanup
+    closesocket(ConnectSocket);
+    WSACleanup();
+    printf("Cleanup Complete\n");
     return 0;
 }

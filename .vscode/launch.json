@@ -5,17 +5,24 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "clang++ - Build and debug active file",
+            "name": "cpp.exe - Build and debug active file",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${fileDirname}/app",
+            "program": "${fileDirname}\\starwars.exe",
             "args": ["Towel.blinkenlights.nl", "23"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],
             "externalConsole": false,
-            "MIMode": "lldb",
-            "preLaunchTask": "C/C++: clang++ build active file"
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:\\MinGW\\bin\\gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         }
     ]
 }
